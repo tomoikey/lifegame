@@ -24,24 +24,6 @@ impl<const MAX: usize> Holder<MAX> {
         }
     }
 
-    async fn push(mut queue: MutexGuard<'_, VecDeque<OwnedCells>>, cells: OwnedCells) {
-        if queue.len() == MAX {
-            queue.remove(0);
-        }
-        queue.push_front(cells);
-    }
-
-    async fn send_to_drawer(
-        mut queue: MutexGuard<'_, VecDeque<OwnedCells>>,
-        sender: MutexGuard<'_, Sender<OwnedCells>>,
-    ) {
-        let next = queue.pop_back();
-        if let Some(cells) = next {
-            drop(queue);
-            sender.send(cells).await.expect("channel closed");
-        }
-    }
-
     pub async fn run(self) {
         let queue = self.queue.clone();
         let receiver = self.receiver.clone();
@@ -55,8 +37,7 @@ impl<const MAX: usize> Holder<MAX> {
                         continue;
                     }
                     let cells = receiver.lock().await.recv().await.expect("channel closed");
-                    let queue = queue.lock().await;
-                    Self::push(queue, cells).await;
+                    queue.lock().await.push_front(cells);
                 }
             })
         };
@@ -66,9 +47,16 @@ impl<const MAX: usize> Holder<MAX> {
             let sender = sender.clone();
             tokio::spawn(async move {
                 loop {
-                    let queue = queue.lock().await;
-                    let sender = sender.lock().await;
-                    Self::send_to_drawer(queue, sender).await;
+                    let queue = queue.lock().await.pop_back();
+                    if let Some(cells) = queue {
+                        sender
+                            .lock()
+                            .await
+                            .send(cells)
+                            .await
+                            .expect("channel closed");
+                    }
+
                     sleep(Duration::from_millis(100)).await;
                 }
             })
