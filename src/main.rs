@@ -1,11 +1,15 @@
-use crossterm::cursor::MoveTo;
+mod calculator;
+mod cell;
+mod drawer;
+mod holder;
+
+use crate::calculator::Calculator;
+use crate::holder::Holder;
 use crossterm::event::{Event, KeyCode};
-use crossterm::style::{Color, PrintStyledContent, Stylize};
+use crossterm::execute;
 use crossterm::terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{cursor, event, terminal};
-use crossterm::{execute, queue};
-use rand::Rng;
-use std::io::{stdout, Result, Write};
+use std::io::{stdout, Result};
 use std::process::exit;
 use std::thread;
 
@@ -24,7 +28,8 @@ fn exit_on_q_input() -> Result<()> {
     exit(0);
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let mut stdout = stdout();
     execute!(
         stdout,
@@ -35,112 +40,26 @@ fn main() -> Result<()> {
 
     thread::spawn(|| exit_on_q_input().expect("exit_on_q_input failed"));
 
+    let (drawer_sender, drawer_receiver) = tokio::sync::mpsc::channel(100);
+    let drawer = drawer::Drawer::new(drawer_receiver);
+    let drawer_thread = tokio::spawn(async move {
+        drawer.run().await;
+    });
+
+    let (holder_sender, holder_receiver) = tokio::sync::mpsc::channel(100);
+    let holder = Holder::<100>::new(holder_receiver, drawer_sender);
+    let holder_thread = tokio::spawn(async move {
+        holder.run().await;
+    });
+
     let (width, height) = terminal::size()?;
-    let mut screen = Screen::new(width, height);
-    loop {
-        let (width, height) = terminal::size()?;
-        screen.set_aspects(width, height);
-        screen.draw();
-        screen.next();
-    }
-}
+    let calculator = Calculator::new(width, height, holder_sender);
+    let calculator_thread = tokio::spawn(async move {
+        calculator.run().await;
+    });
 
-struct Screen {
-    width: u16,
-    height: u16,
-    cells: Vec<Vec<Cell>>,
-}
+    tokio::try_join!(calculator_thread, holder_thread, drawer_thread)
+        .expect("tokio::try_join! failed");
 
-impl Screen {
-    fn new(width: u16, height: u16) -> Self {
-        let mut cells = vec![vec![Cell::Empty; width as usize]; height as usize];
-
-        let mut rng = rand::rng();
-        for row in &mut cells {
-            for cell in row {
-                if rng.random_bool(0.1) {
-                    *cell = Cell::Living;
-                }
-            }
-        }
-
-        Self {
-            width,
-            height,
-            cells,
-        }
-    }
-
-    fn set_aspects(&mut self, width: u16, height: u16) {
-        self.set_width(width);
-        self.set_height(height);
-    }
-
-    fn set_width(&mut self, width: u16) {
-        if self.width != width {
-            self.width = width;
-            for row in &mut self.cells {
-                row.resize(width as usize, Cell::Empty);
-            }
-        }
-    }
-
-    fn set_height(&mut self, height: u16) {
-        if self.height != height {
-            self.height = height;
-            self.cells
-                .resize(height as usize, vec![Cell::Empty; self.width as usize]);
-        }
-    }
-
-    fn next(&mut self) {
-        let mut next = self.cells.clone();
-        for y in 0..self.height as usize {
-            for x in 0..self.width as usize {
-                let mut living_neighbors = 0;
-                for dy in 0..=2 {
-                    for dx in 0..=2 {
-                        if dy == 1 && dx == 1 {
-                            continue;
-                        }
-                        let y = (y + dy + self.height as usize - 1) % self.height as usize;
-                        let x = (x + dx + self.width as usize - 1) % self.width as usize;
-                        if self.cells[y][x] == Cell::Living {
-                            living_neighbors += 1;
-                        }
-                    }
-                }
-                next[y][x] = match (self.cells[y][x], living_neighbors) {
-                    (Cell::Empty, 3) => Cell::Living,
-                    (Cell::Living, 2..=3) => Cell::Living,
-                    _ => Cell::Empty,
-                };
-            }
-        }
-        self.cells = next;
-    }
-
-    fn draw(&self) {
-        let mut stdout = stdout();
-        queue!(stdout, MoveTo(0, 0), Clear(ClearType::All)).unwrap();
-        for row in &self.cells {
-            for cell in row {
-                match cell {
-                    Cell::Empty => {
-                        queue!(stdout, PrintStyledContent(" ".with(Color::Black))).unwrap()
-                    }
-                    Cell::Living => {
-                        queue!(stdout, PrintStyledContent("■".with(Color::White))).unwrap()
-                    }
-                }
-            }
-        }
-        stdout.flush().unwrap();
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Cell {
-    Empty,
-    Living,
+    Ok(())
 }
