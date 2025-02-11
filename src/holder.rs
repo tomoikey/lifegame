@@ -11,9 +11,9 @@ pub struct Holder<const MAX: usize> {
     millis_per_frame: u64,
     queue: Arc<Mutex<VecDeque<OwnedCells>>>,
     /// From Calculator
-    receiver: Arc<Mutex<Receiver<OwnedCells>>>,
+    receiver: Receiver<OwnedCells>,
     /// To Drawer
-    sender: Arc<Mutex<Sender<OwnedCells>>>,
+    sender: Sender<OwnedCells>,
 }
 
 impl<const MAX: usize> Holder<MAX> {
@@ -25,15 +25,13 @@ impl<const MAX: usize> Holder<MAX> {
         Self {
             millis_per_frame,
             queue: Arc::new(Mutex::new(VecDeque::with_capacity(MAX))),
-            receiver: Arc::new(Mutex::new(receiver)),
-            sender: Arc::new(Mutex::new(sender)),
+            receiver,
+            sender,
         }
     }
 
-    pub async fn run(self) {
+    pub async fn run(mut self) {
         let queue = self.queue.clone();
-        let receiver = self.receiver.clone();
-        let sender = self.sender.clone();
 
         let receiver_thread = {
             let queue = queue.clone();
@@ -42,7 +40,7 @@ impl<const MAX: usize> Holder<MAX> {
                     if queue.lock().await.len() == MAX {
                         continue;
                     }
-                    let cells = receiver.lock().await.recv().await.expect("channel closed");
+                    let cells = self.receiver.recv().await.expect("channel closed");
                     queue.lock().await.push_front(cells);
                 }
             })
@@ -50,17 +48,11 @@ impl<const MAX: usize> Holder<MAX> {
 
         let sender_thread = {
             let queue = queue.clone();
-            let sender = sender.clone();
             tokio::spawn(async move {
                 loop {
                     let queue = queue.lock().await.pop_back();
                     if let Some(cells) = queue {
-                        sender
-                            .lock()
-                            .await
-                            .send(cells)
-                            .await
-                            .expect("channel closed");
+                        self.sender.send(cells).await.expect("channel closed");
                     }
 
                     sleep(Duration::from_millis(self.millis_per_frame)).await;
