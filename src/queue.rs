@@ -1,61 +1,54 @@
 use crate::cell::OwnedCells;
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::select;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::Mutex;
-use tokio::time::sleep;
 
 pub struct Queue<const MAX_QUEUE_SIZE: usize> {
-    millis_per_frame: u64,
     queue: Arc<Mutex<VecDeque<OwnedCells>>>,
-    /// From Calculator
-    receiver: Receiver<OwnedCells>,
-    /// To Drawer
-    sender: Sender<OwnedCells>,
+    cell_receiver: Receiver<OwnedCells>,
+    cell_sender: Sender<OwnedCells>,
+    schedule_receiver: Receiver<()>,
 }
 
-impl<const MAX: usize> Queue<MAX> {
+impl<const MAX_QUEUE_SIZE: usize> Queue<MAX_QUEUE_SIZE> {
     pub fn new(
-        millis_per_frame: u64,
-        receiver: Receiver<OwnedCells>,
-        sender: Sender<OwnedCells>,
+        cell_receiver: Receiver<OwnedCells>,
+        cell_sender: Sender<OwnedCells>,
+        schedule_receiver: Receiver<()>,
     ) -> Self {
         Self {
-            millis_per_frame,
-            queue: Arc::new(Mutex::new(VecDeque::with_capacity(MAX))),
-            receiver,
-            sender,
+            queue: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_QUEUE_SIZE))),
+            cell_receiver,
+            cell_sender,
+            schedule_receiver,
         }
     }
 
     pub async fn run(mut self) {
-        let queue = self.queue.clone();
-
         let receiver_thread = {
-            let queue = queue.clone();
+            let queue = Arc::clone(&self.queue);
             tokio::spawn(async move {
                 loop {
-                    if queue.lock().await.len() == MAX {
+                    if queue.lock().await.len() == MAX_QUEUE_SIZE {
                         continue;
                     }
-                    let cells = self.receiver.recv().await.expect("channel closed");
+                    let cells = self.cell_receiver.recv().await.expect("channel closed");
                     queue.lock().await.push_front(cells);
                 }
             })
         };
 
         let sender_thread = {
-            let queue = queue.clone();
+            let queue = self.queue;
             tokio::spawn(async move {
                 loop {
+                    let _ = self.schedule_receiver.recv().await.expect("channel closed");
                     let queue = queue.lock().await.pop_back();
                     if let Some(cells) = queue {
-                        self.sender.send(cells).await.expect("channel closed");
+                        self.cell_sender.send(cells).await.expect("channel closed");
                     }
-
-                    sleep(Duration::from_millis(self.millis_per_frame)).await;
                 }
             })
         };

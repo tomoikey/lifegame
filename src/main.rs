@@ -2,9 +2,11 @@ mod calculator;
 mod cell;
 mod drawer;
 mod queue;
+mod scheduler;
 
 use crate::calculator::Calculator;
 use crate::queue::Queue;
+use crate::scheduler::Scheduler;
 use clap::Parser;
 use clap_derive::Parser;
 use crossterm::event::{Event, KeyCode};
@@ -62,8 +64,11 @@ async fn main() -> Result<()> {
         drawer.run().await;
     });
 
+    let (schedule_sender, schedule_receiver) = tokio::sync::mpsc::channel(100);
+    let scheduler = Scheduler::new(millis_per_frame, schedule_sender);
+
     let (queue_sender, queue_receiver) = tokio::sync::mpsc::channel(100);
-    let queue = Queue::<100>::new(millis_per_frame, queue_receiver, drawer_sender);
+    let queue = Queue::<100>::new(queue_receiver, drawer_sender, schedule_receiver);
     let queue_thread = tokio::spawn(async move {
         queue.run().await;
     });
