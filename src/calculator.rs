@@ -3,8 +3,6 @@ use rand::Rng;
 use tokio::sync::mpsc::Sender;
 
 pub struct Calculator {
-    width: u16,
-    height: u16,
     cells: OwnedCells,
     /// To Holder
     sender: Sender<OwnedCells>,
@@ -23,34 +21,35 @@ impl Calculator {
             }
         }
 
-        Self {
-            width,
-            height,
-            cells,
-            sender,
-        }
+        Self { cells, sender }
     }
 
     fn next(&mut self) {
         let mut next = self.cells.clone();
-        for y in 0..self.height as usize {
-            for x in 0..self.width as usize {
-                let mut living_neighbors = 0;
-                for dy in 0..=2 {
-                    for dx in 0..=2 {
-                        if dy == 1 && dx == 1 {
+        for (y, row) in self.cells.iter().enumerate() {
+            for (x, cell) in row.iter().enumerate() {
+                let mut living = 0;
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        if dy == 0 && dx == 0 {
                             continue;
                         }
-                        let y = (y + dy + self.height as usize - 1) % self.height as usize;
-                        let x = (x + dx + self.width as usize - 1) % self.width as usize;
-                        if self.cells[y][x] == Cell::Living {
-                            living_neighbors += 1;
+                        let y = y as i32 + dy;
+                        let x = x as i32 + dx;
+                        if y < 0 || self.cells.len() as i32 <= y {
+                            continue;
+                        }
+                        if x < 0 || self.cells[y as usize].len() as i32 <= x {
+                            continue;
+                        }
+                        if self.cells[y as usize][x as usize] == Cell::Living {
+                            living += 1;
                         }
                     }
                 }
-                next[y][x] = match (self.cells[y][x], living_neighbors) {
+                next[y][x] = match (cell, living) {
                     (Cell::Empty, 3) => Cell::Living,
-                    (Cell::Living, 2..=3) => Cell::Living,
+                    (Cell::Living, 2) | (Cell::Living, 3) => Cell::Living,
                     _ => Cell::Empty,
                 };
             }
