@@ -1,5 +1,4 @@
 use crate::cell::{Cell, OwnedCells};
-use crossterm::terminal;
 use rand::Rng;
 use tokio::sync::mpsc::Sender;
 
@@ -18,7 +17,7 @@ impl Calculator {
         let mut rng = rand::rng();
         for row in &mut cells {
             for cell in row {
-                if rng.random_bool(0.2) {
+                if rng.random_bool(0.1) {
                     *cell = Cell::Living;
                 }
             }
@@ -29,28 +28,6 @@ impl Calculator {
             height,
             cells,
             sender,
-        }
-    }
-
-    fn set_aspects(&mut self, width: u16, height: u16) {
-        self.set_width(width);
-        self.set_height(height);
-    }
-
-    fn set_width(&mut self, width: u16) {
-        if self.width != width {
-            self.width = width;
-            for row in &mut self.cells {
-                row.resize(width as usize, Cell::Empty);
-            }
-        }
-    }
-
-    fn set_height(&mut self, height: u16) {
-        if self.height != height {
-            self.height = height;
-            self.cells
-                .resize(height as usize, vec![Cell::Empty; self.width as usize]);
         }
     }
 
@@ -83,8 +60,6 @@ impl Calculator {
 
     pub async fn run(mut self) {
         loop {
-            let (width, height) = terminal::size().expect("terminal::size failed");
-            self.set_aspects(width, height);
             self.next();
             self.sender
                 .send(self.cells.clone())

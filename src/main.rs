@@ -12,6 +12,7 @@ use crossterm::{cursor, event, terminal};
 use std::io::{stdout, Result};
 use std::process::exit;
 use std::thread;
+use tokio::select;
 
 fn exit_on_q_input() -> Result<()> {
     terminal::enable_raw_mode()?;
@@ -37,7 +38,7 @@ async fn main() -> Result<()> {
         EnterAlternateScreen,
         Clear(ClearType::All)
     )?;
-
+    
     thread::spawn(|| exit_on_q_input().expect("exit_on_q_input failed"));
 
     let (drawer_sender, drawer_receiver) = tokio::sync::mpsc::channel(100);
@@ -58,8 +59,15 @@ async fn main() -> Result<()> {
         calculator.run().await;
     });
 
-    tokio::try_join!(calculator_thread, holder_thread, drawer_thread)
-        .expect("tokio::try_join! failed");
-
-    Ok(())
+    select! {
+        _ = calculator_thread => {
+            panic!("[Main] calculator_thread finished");
+        }
+        _ = holder_thread => {
+            panic!("[Main] holder_thread finished");
+        }
+        _ = drawer_thread => {
+            panic!("[Main] drawer_thread finished");
+        }
+    }
 }

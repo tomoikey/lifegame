@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::select;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 use tokio::time::sleep;
 
 pub struct Holder<const MAX: usize> {
@@ -24,57 +24,63 @@ impl<const MAX: usize> Holder<MAX> {
         }
     }
 
-    async fn push(&self, cells: OwnedCells) {
-        let mut queue = self.queue.lock().await;
+    async fn push(mut queue: MutexGuard<'_, VecDeque<OwnedCells>>, cells: OwnedCells) {
         if queue.len() == MAX {
             queue.remove(0);
         }
         queue.push_front(cells);
     }
 
-    async fn send_to_drawer(&self) {
-        let next = self.queue.lock().await.pop_back();
+    async fn send_to_drawer(
+        mut queue: MutexGuard<'_, VecDeque<OwnedCells>>,
+        sender: MutexGuard<'_, Sender<OwnedCells>>,
+    ) {
+        let next = queue.pop_back();
         if let Some(cells) = next {
-            self.sender
-                .lock()
-                .await
-                .send(cells)
-                .await
-                .expect("channel closed");
+            drop(queue);
+            sender.send(cells).await.expect("channel closed");
         }
     }
 
     pub async fn run(self) {
-        let this = Arc::new(Mutex::new(self));
+        let queue = self.queue.clone();
+        let receiver = self.receiver.clone();
+        let sender = self.sender.clone();
 
         let receiver_thread = {
-            let this = Arc::clone(&this);
+            let queue = queue.clone();
             tokio::spawn(async move {
-                let this = this.lock().await;
-                let cells = this
-                    .receiver
-                    .lock()
-                    .await
-                    .recv()
-                    .await
-                    .expect("channel closed");
-                this.push(cells).await;
+                loop {
+                    if queue.lock().await.len() == MAX {
+                        continue;
+                    }
+                    let cells = receiver.lock().await.recv().await.expect("channel closed");
+                    let queue = queue.lock().await;
+                    Self::push(queue, cells).await;
+                }
             })
         };
 
         let sender_thread = {
-            let this = Arc::clone(&this);
+            let queue = queue.clone();
+            let sender = sender.clone();
             tokio::spawn(async move {
                 loop {
+                    let queue = queue.lock().await;
+                    let sender = sender.lock().await;
+                    Self::send_to_drawer(queue, sender).await;
                     sleep(Duration::from_millis(100)).await;
-                    this.lock().await.send_to_drawer().await;
                 }
             })
         };
 
         select! {
-            _ = receiver_thread => {},
-            _ = sender_thread => {},
+            _ = receiver_thread => {
+                panic!("receiver_thread panicked");
+            },
+            _ = sender_thread => {
+                panic!("sender_thread panicked");
+            },
         }
     }
 }
