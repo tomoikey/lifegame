@@ -7,7 +7,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
-pub struct Holder<const MAX: usize> {
+pub struct Queue<const MAX_QUEUE_SIZE: usize> {
     millis_per_frame: u64,
     queue: Arc<Mutex<VecDeque<OwnedCells>>>,
     /// From Calculator
@@ -16,7 +16,7 @@ pub struct Holder<const MAX: usize> {
     sender: Sender<OwnedCells>,
 }
 
-impl<const MAX: usize> Holder<MAX> {
+impl<const MAX: usize> Queue<MAX> {
     pub fn new(
         millis_per_frame: u64,
         receiver: Receiver<OwnedCells>,

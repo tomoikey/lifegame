@@ -1,10 +1,10 @@
 mod calculator;
 mod cell;
 mod drawer;
-mod holder;
+mod queue;
 
 use crate::calculator::Calculator;
-use crate::holder::Holder;
+use crate::queue::Queue;
 use clap::Parser;
 use clap_derive::Parser;
 use crossterm::event::{Event, KeyCode};
@@ -62,14 +62,14 @@ async fn main() -> Result<()> {
         drawer.run().await;
     });
 
-    let (holder_sender, holder_receiver) = tokio::sync::mpsc::channel(100);
-    let holder = Holder::<100>::new(millis_per_frame, holder_receiver, drawer_sender);
-    let holder_thread = tokio::spawn(async move {
-        holder.run().await;
+    let (queue_sender, queue_receiver) = tokio::sync::mpsc::channel(100);
+    let queue = Queue::<100>::new(millis_per_frame, queue_receiver, drawer_sender);
+    let queue_thread = tokio::spawn(async move {
+        queue.run().await;
     });
 
     let (width, height) = terminal::size()?;
-    let calculator = Calculator::new(ratio, width, height, holder_sender);
+    let calculator = Calculator::new(ratio, width, height, queue_sender);
     let calculator_thread = tokio::spawn(async move {
         calculator.run().await;
     });
@@ -78,8 +78,8 @@ async fn main() -> Result<()> {
         _ = calculator_thread => {
             panic!("[Main] calculator_thread finished");
         }
-        _ = holder_thread => {
-            panic!("[Main] holder_thread finished");
+        _ = queue_thread => {
+            panic!("[Main] queue_thread finished");
         }
         _ = drawer_thread => {
             panic!("[Main] drawer_thread finished");
