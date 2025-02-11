@@ -26,7 +26,7 @@ impl Drawer {
                         queue!(stdout, PrintStyledContent(" ".with(Color::Black))).unwrap()
                     }
                     Cell::Living => {
-                        queue!(stdout, PrintStyledContent("o".with(Color::White))).unwrap()
+                        queue!(stdout, PrintStyledContent("*".with(Color::White))).unwrap()
                     }
                 }
             }

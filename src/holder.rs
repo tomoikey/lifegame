@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 pub struct Holder<const MAX: usize> {
+    millis_per_frame: u64,
     queue: Arc<Mutex<VecDeque<OwnedCells>>>,
     /// From Calculator
     receiver: Arc<Mutex<Receiver<OwnedCells>>>,
@@ -16,8 +17,13 @@ pub struct Holder<const MAX: usize> {
 }
 
 impl<const MAX: usize> Holder<MAX> {
-    pub fn new(receiver: Receiver<OwnedCells>, sender: Sender<OwnedCells>) -> Self {
+    pub fn new(
+        millis_per_frame: u64,
+        receiver: Receiver<OwnedCells>,
+        sender: Sender<OwnedCells>,
+    ) -> Self {
         Self {
+            millis_per_frame,
             queue: Arc::new(Mutex::new(VecDeque::with_capacity(MAX))),
             receiver: Arc::new(Mutex::new(receiver)),
             sender: Arc::new(Mutex::new(sender)),
@@ -57,7 +63,7 @@ impl<const MAX: usize> Holder<MAX> {
                             .expect("channel closed");
                     }
 
-                    sleep(Duration::from_millis(100)).await;
+                    sleep(Duration::from_millis(self.millis_per_frame)).await;
                 }
             })
         };

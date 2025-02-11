@@ -5,6 +5,8 @@ mod holder;
 
 use crate::calculator::Calculator;
 use crate::holder::Holder;
+use clap::Parser;
+use clap_derive::Parser;
 use crossterm::event::{Event, KeyCode};
 use crossterm::execute;
 use crossterm::terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
@@ -13,6 +15,14 @@ use std::io::{stdout, Result};
 use std::process::exit;
 use std::thread;
 use tokio::select;
+
+#[derive(Parser)]
+struct Args {
+    #[clap(short, long, default_value = "0.12")]
+    ratio: f64,
+    #[clap(short, long, default_value = "100")]
+    millis_per_frame: u64,
+}
 
 fn exit_on_q_pressed() -> Result<()> {
     terminal::enable_raw_mode()?;
@@ -31,6 +41,11 @@ fn exit_on_q_pressed() -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let Args {
+        ratio,
+        millis_per_frame,
+    } = Args::parse();
+
     let mut stdout = stdout();
     execute!(
         stdout,
@@ -48,13 +63,13 @@ async fn main() -> Result<()> {
     });
 
     let (holder_sender, holder_receiver) = tokio::sync::mpsc::channel(100);
-    let holder = Holder::<100>::new(holder_receiver, drawer_sender);
+    let holder = Holder::<100>::new(millis_per_frame, holder_receiver, drawer_sender);
     let holder_thread = tokio::spawn(async move {
         holder.run().await;
     });
 
     let (width, height) = terminal::size()?;
-    let calculator = Calculator::new(0.2, width, height, holder_sender);
+    let calculator = Calculator::new(ratio, width, height, holder_sender);
     let calculator_thread = tokio::spawn(async move {
         calculator.run().await;
     });
