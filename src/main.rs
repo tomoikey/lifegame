@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
         EnterAlternateScreen,
         Clear(ClearType::All)
     )?;
-    
+
     thread::spawn(|| exit_on_q_input().expect("exit_on_q_input failed"));
 
     let (drawer_sender, drawer_receiver) = tokio::sync::mpsc::channel(100);
