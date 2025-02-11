@@ -1,14 +1,15 @@
+mod args;
 mod calculator;
 mod cell;
 mod drawer;
 mod queue;
 mod scheduler;
 
+use crate::args::Args;
 use crate::calculator::Calculator;
 use crate::queue::Queue;
 use crate::scheduler::Scheduler;
 use clap::Parser;
-use clap_derive::Parser;
 use crossterm::event::{Event, KeyCode};
 use crossterm::execute;
 use crossterm::terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
@@ -17,14 +18,6 @@ use std::io::{stdout, Result};
 use std::process::exit;
 use std::thread;
 use tokio::select;
-
-#[derive(Parser)]
-struct Args {
-    #[clap(short, long, default_value = "0.12")]
-    ratio: f64,
-    #[clap(short, long, default_value = "100")]
-    millis_per_frame: u64,
-}
 
 fn exit_on_q_pressed() -> Result<()> {
     terminal::enable_raw_mode()?;
@@ -43,10 +36,8 @@ fn exit_on_q_pressed() -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let Args {
-        ratio,
-        millis_per_frame,
-    } = Args::parse();
+    let args = Args::parse();
+    let (ratio, millis_per_frame) = (args.ratio(), args.millis_per_frame());
 
     let mut stdout = stdout();
     execute!(
