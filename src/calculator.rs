@@ -9,13 +9,13 @@ pub struct Calculator {
 }
 
 impl Calculator {
-    pub fn new(width: u16, height: u16, sender: Sender<OwnedCells>) -> Self {
+    pub fn new(probability: f64, width: u16, height: u16, sender: Sender<OwnedCells>) -> Self {
         let mut cells = vec![vec![Cell::Empty; width as usize]; height as usize];
 
         let mut rng = rand::rng();
         for row in &mut cells {
             for cell in row {
-                if rng.random_bool(0.1) {
+                if rng.random_bool(probability) {
                     *cell = Cell::Living;
                 }
             }

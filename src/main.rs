@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
     });
 
     let (width, height) = terminal::size()?;
-    let calculator = Calculator::new(width, height, holder_sender);
+    let calculator = Calculator::new(0.2, width, height, holder_sender);
     let calculator_thread = tokio::spawn(async move {
         calculator.run().await;
     });
