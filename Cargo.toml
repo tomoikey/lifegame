@@ -1,7 +1,9 @@
 [package]
-name = "crossterm-play"
+name = "lifegame"
 version = "0.1.0"
 edition = "2021"
+authors = ["tomoikey"]
+description = "Conway's Game of Life"
 
 [dependencies]
 clap = "4.5.28"
