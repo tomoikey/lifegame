@@ -14,7 +14,7 @@ use std::process::exit;
 use std::thread;
 use tokio::select;
 
-fn exit_on_q_input() -> Result<()> {
+fn exit_on_q_pressed() -> Result<()> {
     terminal::enable_raw_mode()?;
     loop {
         let event = event::read()?;
@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
         Clear(ClearType::All)
     )?;
 
-    thread::spawn(|| exit_on_q_input().expect("exit_on_q_input failed"));
+    thread::spawn(|| exit_on_q_pressed().expect("exit_on_q_input failed"));
 
     let (drawer_sender, drawer_receiver) = tokio::sync::mpsc::channel(100);
     let drawer = drawer::Drawer::new(drawer_receiver);
