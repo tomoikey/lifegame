@@ -66,6 +66,9 @@ async fn main() -> Result<()> {
 
     let (schedule_sender, schedule_receiver) = tokio::sync::mpsc::channel(100);
     let scheduler = Scheduler::new(millis_per_frame, schedule_sender);
+    let scheduler_thread = tokio::spawn(async move {
+        scheduler.run().await;
+    });
 
     let (queue_sender, queue_receiver) = tokio::sync::mpsc::channel(100);
     let queue = Queue::<100>::new(queue_receiver, drawer_sender, schedule_receiver);
@@ -82,6 +85,9 @@ async fn main() -> Result<()> {
     select! {
         _ = calculator_thread => {
             panic!("[Main] calculator_thread finished");
+        }
+        _ = scheduler_thread => {
+            panic!("[Main] scheduler_thread finished");
         }
         _ = queue_thread => {
             panic!("[Main] queue_thread finished");
